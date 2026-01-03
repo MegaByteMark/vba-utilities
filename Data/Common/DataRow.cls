@@ -53,12 +53,12 @@ End Sub
 ''' Gets the total number of items in the row
 ''' </summary>
 ''' <returns>The count of items</returns>
-Public Function ColumnCount() As Long
+Public Function ItemCount() As Long
     On Error Resume Next
     If UBound(items) < LBound(items) Then
-        ColumnCount = 0
+        ItemCount = 0
     Else
-        ColumnCount = UBound(items) - LBound(items) + 1
+        ItemCount = UBound(items) - LBound(items) + 1
     End If
     On Error GoTo 0
 End Function
@@ -71,14 +71,19 @@ End Function
 Public Function AddValue(ByVal value As Variant) As Long
     Dim currentCount As Long
     
-    currentCount = ColumnCount()
+    currentCount = ItemCount()
     
     ' Resize array to accommodate new item
     ReDim Preserve items(0 To currentCount)
-    
-    ' Store the value
-    If IsObject(value) Then
-        Set items(currentCount) = value
+
+    If IsEmpty(value) Or IsNull(value) Then
+        items(currentCount) = value
+    ElseIf IsObject(value) Then
+        If value Is Nothing Then
+            items(currentCount) = Nothing
+        Else
+            Set items(currentCount) = value
+        End If
     Else
         items(currentCount) = value
     End If
@@ -93,7 +98,7 @@ End Function
 ''' <returns>The value at the specified position</returns>
 ''' <remarks>Raises error 521 if ordinal is out of bounds</remarks>
 Public Function GetValue(ByVal ordinal As Long) As Variant
-    If ColumnCount() = 0 Then
+    If ItemCount() = 0 Then
         Err.Raise vbObjectError + 521, "DataRow.GetValue", "Row has no items."
     End If
     
@@ -115,7 +120,7 @@ End Function
 ''' <param name="value">The value to set</param>
 ''' <remarks>Raises error 522 if ordinal is out of bounds</remarks>
 Public Sub SetValue(ByVal ordinal As Long, ByVal value As Variant)
-    If ColumnCount() = 0 Then
+    If ItemCount() = 0 Then
         Err.Raise vbObjectError + 522, "DataRow.SetValue", "Row has no items."
     End If
     
@@ -123,8 +128,15 @@ Public Sub SetValue(ByVal ordinal As Long, ByVal value As Variant)
         Err.Raise vbObjectError + 522, "DataRow.SetValue", "Item ordinal is out of bounds."
     End If
     
-    If IsObject(value) Then
-        Set items(ordinal) = value
+    ' Handle Empty, Null, and Nothing
+    If IsEmpty(value) Or IsNull(value) Then
+        items(ordinal) = value
+    ElseIf IsObject(value) Then
+        If value Is Nothing Then
+            Set items(ordinal) = Nothing
+        Else
+            Set items(ordinal) = value
+        End If
     Else
         items(ordinal) = value
     End If
@@ -139,7 +151,7 @@ Public Function RemoveValue(ByVal ordinal As Long) As Boolean
     Dim i As Long
     Dim currentCount As Long
     
-    currentCount = ColumnCount()
+    currentCount = ItemCount()
     
     If currentCount = 0 Then
         RemoveValue = False
@@ -151,6 +163,15 @@ Public Function RemoveValue(ByVal ordinal As Long) As Boolean
         Exit Function
     End If
     
+    ' Clean up object reference if applicable
+    On Error Resume Next
+
+    If IsObject(items(ordinal)) Then
+        Set items(ordinal) = Nothing
+    End If
+    
+    On Error GoTo 0
+    
     ' Shift remaining items down to fill the gap
     For i = ordinal To UBound(items) - 1
         If IsObject(items(i + 1)) Then
@@ -161,7 +182,11 @@ Public Function RemoveValue(ByVal ordinal As Long) As Boolean
     Next i
     
     ' Resize array to trim off the last element
-    ReDim Preserve items(0 To currentCount - 2)
+    If currentCount > 1 Then
+        ReDim Preserve items(0 To currentCount - 2)
+    Else
+        ReDim items(0 To -1)  ' Empty array if removing last item
+    End If
     
     RemoveValue = True
 End Function
@@ -183,9 +208,13 @@ End Function
 ''' <summary>
 ''' Gets all items as an array
 ''' </summary>
-''' <returns>Array of all values in the row</returns>
+''' <returns>Array of all values in the row, or Empty if row has no items</returns>
 Public Function ToArray() As Variant
-    ToArray = items
+    If ItemCount() = 0 Then
+        ToArray = Array()  ' Return empty array instead of uninitialized array
+    Else
+        ToArray = items
+    End If
 End Function
 
 ''' <summary>
@@ -198,15 +227,18 @@ Public Function Clone() As DataRow
     
     Set newRow = New DataRow
     
-    If ColumnCount() > 0 Then
+    On Error GoTo CloneError
+    
+    If ItemCount() > 0 Then
         For i = LBound(items) To UBound(items)
-            If IsObject(items(i)) Then
-                Call newRow.AddValue(items(i))
-            Else
-                Call newRow.AddValue(items(i))
-            End If
+            Call newRow.AddValue(items(i))
         Next i
     End If
     
     Set Clone = newRow
+    Exit Function
+    
+CloneError:
+    Set Clone = Nothing
+    Err.Raise Err.Number, "DataRow.Clone", "Error cloning row: " & Err.Description
 End Function

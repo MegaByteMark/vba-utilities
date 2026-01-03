@@ -28,14 +28,26 @@ Option Explicit
 Private name As String
 Private tables() As DataTable
 
+''' <summary>
+''' Sets the name of the DataSet
+''' </summary>
+''' <param name="value">The name to assign</param>
 Public Property Let Name(value As String)
     name = value
 End Property
 
+''' <summary>
+''' Gets the name of the DataSet
+''' </summary>
+''' <returns>The DataSet name</returns>
 Public Property Get Name() As String
     Name = name
 End Property
 
+''' <summary>
+''' Gets a copy of the tables array
+''' </summary>
+''' <returns>Array of DataTable objects</returns>
 Public Property Get Tables() As DataTable()
     Tables = tables
 End Property
@@ -49,6 +61,19 @@ End Property
 ''' </summary>
 ''' <returns>True if successful</returns>
 Public Function ClearTables() As Boolean
+    Dim i As Long
+    
+    ' Clean up object references
+    On Error Resume Next
+
+    If UBound(tables) >= LBound(tables) Then
+        For i = LBound(tables) To UBound(tables)
+            Set tables(i) = Nothing
+        Next i
+    End If
+    
+    On Error GoTo 0
+    
     ReDim tables(0 To -1)
     ClearTables = True
 End Function
@@ -58,7 +83,7 @@ End Function
 ''' </summary>
 ''' <returns>True if successful</returns>
 Public Function Clear() As Boolean
-    ClearTables
+    Call ClearTables
     Clear = True
 End Function
 
@@ -76,19 +101,24 @@ Public Function Clone() As DataSet
     newDataSet.Name = Me.Name
 
     ' Clone each table
-    On Error Resume Next
-
+    On Error GoTo CloneError
+    
     If UBound(tables) >= LBound(tables) Then
         For i = LBound(tables) To UBound(tables)
             Set tbl = tables(i)
-            Set newTbl = tbl.Clone()
-            Call newDataSet.AddTable(newTbl)
+            If Not tbl Is Nothing Then  ' Add this check
+                Set newTbl = tbl.Clone()
+                Call newDataSet.AddTable(newTbl)
+            End If
         Next i
     End If
 
-    On Error GoTo 0
-
     Set Clone = newDataSet
+    Exit Function
+    
+CloneError:
+    Set Clone = Nothing
+    Err.Raise Err.Number, "DataSet.Clone", "Error cloning dataset: " & Err.Description
 End Function
 
 ''' <summary>
@@ -194,10 +224,16 @@ End Function
 ''' <param name="ordinal">The zero-based index of the table to retrieve</param>
 ''' <returns>The DataTable object if found, Nothing if ordinal is out of bounds</returns>
 Public Function GetTableByOrdinal(ordinal As Long) As DataTable
+    On Error Resume Next
+    If TableCount() = 0 Then  ' Add this check
+        Set GetTableByOrdinal = Nothing
+        Exit Function
+    End If
+    On Error GoTo 0
+    
     If ordinal >= LBound(tables) And ordinal <= UBound(tables) Then
         Set GetTableByOrdinal = tables(ordinal)
     Else
-        ' If out of bounds, return Nothing
         Set GetTableByOrdinal = Nothing
     End If
 End Function
@@ -207,7 +243,15 @@ End Function
 ''' </summary>
 ''' <returns>The count of tables</returns>
 Public Function TableCount() As Long
-    TableCount = UBound(tables) - LBound(tables) + 1
+    On Error Resume Next
+
+    If UBound(tables) < LBound(tables) Then
+        TableCount = 0
+    Else
+        TableCount = UBound(tables) - LBound(tables) + 1
+    End If
+    
+    On Error GoTo 0
 End Function
 
 ''' <summary>
