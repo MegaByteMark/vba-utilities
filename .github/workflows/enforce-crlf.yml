@@ -1,0 +1,21 @@
+name: Force CRLF for files inside the Git index
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  enforce-crlf:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Enforce CRLF action
+      uses: DecimalTurn/Enforce-CRLF@2b2f7b4f08a0d4f380f2d8be6b42e7d46e076065 #v1.2.0
+      with:
+        extensions: .bas, .frm, .cls
+        do-checkout: true
+        do-push: true
