@@ -297,6 +297,18 @@ Public Function AddRow(ByRef row As DataRow) As DataRow
 End Function
 
 ''' <summary>
+''' Creates a new empty DataRow instance
+''' </summary>
+''' <returns>A new DataRow object</returns>
+Public Function NewRow() As DataRow
+    Dim newRow As DataRow
+
+    Set newRow = New DataRow
+
+    Set NewRow = newRow
+End Function
+
+''' <summary>
 ''' Gets a row by its ordinal position
 ''' </summary>
 ''' <param name="ordinal">The zero-based index of the row</param>
