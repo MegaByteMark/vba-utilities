@@ -19,6 +19,33 @@
 ' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ' SOFTWARE.
 
+
+'========================================
+' DataSet Class
+'========================================
+' Provides a collection of DataTables
+'
+' Dependencies:
+'  - DataTable.cls
+'
+' Error Codes:
+'  512 - Cannot add a Nothing table to the DataSet
+'  513 - A table with the specified name already exists in the DataSet
+'  514 - A table with the specified name already exists after renaming attempt
+'
+' Usage:
+'  Dim ds As DataSet
+'  Set ds = New DataSet
+'  ds.Name = "MyDataSet"
+'  Dim tbl As DataTable
+'  Set tbl = New DataTable
+'  tbl.Name = "MyTable"
+'  Call ds.AddTable(tbl)
+'
+' Author: MegaByteMark
+' Version: 2.0
+'========================================
+
 Option Explicit
 
 '========================================

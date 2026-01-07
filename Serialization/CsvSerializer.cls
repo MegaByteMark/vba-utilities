@@ -46,7 +46,7 @@
 '   csv = serializer.Serialize(myDataTable)
 '
 ' Author: MegaByteMark
-' Version: 1.0
+' Version: 2.0
 '========================================
 
 Option Explicit
@@ -92,42 +92,32 @@ Private Sub Class_Initialize()
 End Sub
 
 ''' <summary>
-''' Escapes a CSV field according to CSV rules.
+''' Converts a Collection of strings to an array of strings.
 ''' </summary>
-''' <param name="field">The field to escape.</param>
-''' <returns>Escaped CSV field.</returns>
-Private Function EscapeCsvField(ByVal field As String) As String
-    Dim needsQuotes As Boolean
-    Dim escapedField As String
-    
-    ' Check if the field contains special characters
-    needsQuotes = InStr(field, ",") > 0 Or InStr(field, """") > 0 Or InStr(field, vbCr) > 0 Or InStr(field, vbLf) > 0
-    
-    ' Escape double quotes by doubling them
-    escapedField = Replace(field, """", """""")
-    
-    ' Enclose in double quotes if necessary
-    If needsQuotes Then
-        escapedField = """" & escapedField & """"
-    End If
-    
-    EscapeCsvField = escapedField
-End Function
+''' <param name="col">The Collection to convert.</param>
+''' <returns>Array of strings.</returns>
+Private Function CollectionToArray(col As Collection) As String()
+    Dim arr() As String
+    Dim i As Long
 
-Private Function UnescapeCsvField(ByVal field As String) As String
-    Dim unescapedField As String
-    
-    ' Remove enclosing double quotes if present
-    If Left(field, 1) = """" And Right(field, 1) = """" Then
-        unescapedField = Mid(field, 2, Len(field) - 2)
-    Else
-        unescapedField = field
+    If col Is Nothing Then
+        Err.Raise 5, "CollectionToArray", "Collection cannot be Nothing."
     End If
     
-    ' Replace doubled double quotes with single double quotes
-    unescapedField = Replace(unescapedField, """""", """")
-    
-    UnescapeCsvField = unescapedField
+    If col.Count = 0 Then
+        ' Return properly sized empty array
+        ReDim arr(0 To -1)  ' Creates a truly empty array
+        CollectionToArray = arr
+        Exit Function
+    End If
+
+    ReDim arr(0 To col.Count - 1)
+
+    For i = 1 To col.Count
+        arr(i - 1) = col(i)
+    Next i
+
+    CollectionToArray = arr
 End Function
 
 ''' <summary>
@@ -196,35 +186,6 @@ Public Function Serialize(ByVal dataTable As DataTable) As String
     
     ' Combine all lines into a single string
     Serialize = Join(CollectionToArray(csvLines), vbCrLf)
-End Function
-
-''' <summary>
-''' Converts a Collection of strings to an array of strings.
-''' </summary>
-''' <param name="col">The Collection to convert.</param>
-''' <returns>Array of strings.</returns>
-Private Function CollectionToArray(col As Collection) As String()
-    Dim arr() As String
-    Dim i As Long
-
-    If col Is Nothing Then
-        Err.Raise 5, "CollectionToArray", "Collection cannot be Nothing."
-    End If
-    
-    If col.Count = 0 Then
-        ' Return properly sized empty array
-        ReDim arr(0 To -1)  ' Creates a truly empty array
-        CollectionToArray = arr
-        Exit Function
-    End If
-
-    ReDim arr(0 To col.Count - 1)
-
-    For i = 1 To col.Count
-        arr(i - 1) = col(i)
-    Next i
-
-    CollectionToArray = arr
 End Function
 
 ''' <summary>
@@ -301,6 +262,10 @@ Public Function Deserialize(ByVal csvString As String) As DataTable
 
     Set Deserialize = dataTable
 End Function
+
+'========================================
+' Csv Parsing Helpers
+'========================================
 
 ''' <summary>
 ''' Reads a single CSV line and splits it into fields, handling quoted fields.
@@ -438,4 +403,43 @@ Private Function ReadCsvFile(csvFile As String) As String()
 
     ReadCsvFile = result
 
+End Function
+
+''' <summary>
+''' Escapes a CSV field according to CSV rules.
+''' </summary>
+''' <param name="field">The field to escape.</param>
+''' <returns>Escaped CSV field.</returns>
+Private Function EscapeCsvField(ByVal field As String) As String
+    Dim needsQuotes As Boolean
+    Dim escapedField As String
+    
+    ' Check if the field contains special characters
+    needsQuotes = InStr(field, ",") > 0 Or InStr(field, """") > 0 Or InStr(field, vbCr) > 0 Or InStr(field, vbLf) > 0
+    
+    ' Escape double quotes by doubling them
+    escapedField = Replace(field, """", """""")
+    
+    ' Enclose in double quotes if necessary
+    If needsQuotes Then
+        escapedField = """" & escapedField & """"
+    End If
+    
+    EscapeCsvField = escapedField
+End Function
+
+Private Function UnescapeCsvField(ByVal field As String) As String
+    Dim unescapedField As String
+    
+    ' Remove enclosing double quotes if present
+    If Left(field, 1) = """" And Right(field, 1) = """" Then
+        unescapedField = Mid(field, 2, Len(field) - 2)
+    Else
+        unescapedField = field
+    End If
+    
+    ' Replace doubled double quotes with single double quotes
+    unescapedField = Replace(unescapedField, """""", """")
+    
+    UnescapeCsvField = unescapedField
 End Function

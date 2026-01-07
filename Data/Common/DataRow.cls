@@ -19,6 +19,28 @@
 ' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ' SOFTWARE.
 
+
+'========================================
+' DataRow Class
+'========================================
+' Provides a definition for a row in a DataTable
+'
+' Dependencies:
+' None
+'
+' Error Codes:
+'  None
+'
+' Usage:
+'  Dim row As DataRow
+'  Set row = New DataRow
+'  Call row.AddValue 123
+'  Call row.AddValue "Sample Text"
+'
+' Author: MegaByteMark
+' Version: 2.0
+'========================================
+
 Option Explicit
 
 '========================================

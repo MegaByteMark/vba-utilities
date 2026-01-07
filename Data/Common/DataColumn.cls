@@ -19,6 +19,29 @@
 ' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ' SOFTWARE.
 
+'========================================
+' DataColumn Class
+'========================================
+' Provides a definition for a column in a DataTable
+'
+' Dependencies:
+'  None
+'
+' Error Codes:
+'  None
+'
+' Usage:
+'  Dim col As DataColumn
+'  Set col = New DataColumn
+'  col.Name = "ID"
+'  col.DataType = vbLong
+'  col.AllowNull = False
+'  col.DefaultValue = 0
+'
+' Author: MegaByteMark
+' Version: 2.0
+'========================================
+
 Option Explicit
 
 '========================================

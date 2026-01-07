@@ -19,6 +19,42 @@
 ' OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ' SOFTWARE.
 
+
+'========================================
+' DataTable Class
+'========================================
+' Provides a definition for a table structure with columns and rows
+'
+' Dependencies:
+'  - DataColumn.cls
+'  - DataRow.cls
+'
+' Error Codes:
+'  511 - Cannot add a null column reference.
+'  512 - A column with the specified name already exists.
+'  513 - Cannot add a null row reference.
+'  514 - Row column count does not match table column count.
+'  515 - No columns in the table or column ordinal out of bounds.
+'  516 - No rows in the table or row ordinal out of bounds.
+'  519 - Recordset reference is null.
+'
+' Usage:
+'  Dim table As DataTable
+'  Set table = New DataTable
+'  table.Name = "MyTable"
+'  Dim myColumn As DataColumn
+'  Set myColumn = New DataColumn
+'  myColumn.Name = "Column1"
+'  Dim myRow As DataRow
+'  Set myRow = New DataRow
+'  Call myRow.AddValue "Value1"
+'  table.AddColumn myColumn
+'  table.AddRow myRow
+'
+' Author: MegaByteMark
+' Version: 2.0
+'========================================
+
 Option Explicit
 
 '========================================
