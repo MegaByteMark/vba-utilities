@@ -94,6 +94,118 @@ Public Function Serialize(dataTable As DataTable) As String
     Serialize = json
 End Function
 
+'''<summary>
+''' Serializes the columns of a DataTable into JSON format
+'''</summary>
+'''<param name="dataTable">The DataTable containing the columns to serialize</param>
+'''<returns>A JSON string representing the columns</returns>
+Private Function SerializeColumns(dataTable As DataTable) As String
+    Dim json As String
+    Dim i As Long
+    Dim column As DataColumn
+
+    json = "["
+
+    For i = 0 To dataTable.ColumnCount() - 1
+        Set column = dataTable.Columns(i)
+
+        json = json & vbCrLf & "  {"
+        json = json & """name"": """ & EscapeJson(column.Name) & """," & vbCrLf
+        json = json & """dataType"": """ & EscapeJson(VbTypeToString(column.DataType)) & """" & vbCrLf
+        json = json & "}"
+
+        If i < dataTable.ColumnCount() - 1 Then
+            json = json & ","
+        End If
+    Next i
+
+    json = json & vbCrLf & "]"
+
+    SerializeColumns = json
+End Function
+
+'''<summary>
+''' Serializes the rows of a DataTable into JSON format
+'''</summary>
+'''<param name="dataTable">The DataTable containing the rows to serialize</param>
+'''<returns>A JSON string representing the rows</returns>
+Private Function SerializeRows(dataTable As DataTable) As String
+    Dim json As String
+    Dim i As Long
+    Dim j As Long
+    Dim row As DataRow
+    Dim cell As DataCell
+    Dim column As DataColumn
+    Dim parts() as String
+    Dim partCount As Long
+
+    ReDim parts(0 To dataTable.RowCount() * (dataTable.ColumnCount() + 2))
+    partCount = 0
+    parts(partCount) = "["
+    partCount = partCount + 1
+
+    For i = 0 To dataTable.RowCount() - 1
+        Set row = dataTable.Rows(i)
+
+        parts(partCount) = vbCrLf & "  {"
+
+        For j = 0 To dataTable.ColumnCount() - 1
+            Set cell = row.GetValue(j)
+            Set column = dataTable.Columns(j)
+
+            parts(partCount) = parts(partCount) & """" & EscapeJson(column.Name) & """: "
+            partCount = partCount + 1
+
+            If IsNull(cell) Or IsEmpty(cell) Then
+                parts(partCount) = parts(partCount) & "null"
+                partCount = partCount + 1
+            Else
+                Select Case column.DataType
+                    Case vbBoolean
+                        If SafeBooleanConvert(cell) Then
+                            parts(partCount) = "true"
+                            partCount = partCount + 1
+                        Else
+                            parts(partCount) = "false"
+                            partCount = partCount + 1
+                        End If
+                    Case vbInteger, vbLong, vbSingle, vbDouble, vbCurrency, vbDecimal
+                        parts(partCount) = CStr(cell)
+                        partCount = partCount + 1
+                    Case Else
+                        parts(partCount) = """" & EscapeJson(CStr(cell)) & """"
+                        partCount = partCount + 1
+                End Select
+            End If
+
+            If j < dataTable.ColumnCount() - 1 Then
+                parts(partCount) = ", "
+                partCount = partCount + 1
+            End If
+        Next j
+
+        parts(partCount) = vbCrLf & "  }"
+        partCount = partCount + 1
+
+        If i < dataTable.RowCount() - 1 Then
+            parts(partCount) = ","
+            partCount = partCount + 1
+        End If
+    Next i
+
+    parts(partCount) = vbCrLf & "]"
+    partCount = partCount + 1
+
+    json = Join(parts, "", 0, partCount)
+
+    SerializeRows = json
+End Function
+
+''' <summary>
+''' Deserializes a JSON string into a DataTable
+''' </summary>
+''' <param name="json">The JSON string to deserialize</param>
+''' <returns>A DataTable represented by the JSON string</returns>
 Public Function Deserialize(json As String) As DataTable
     Dim dataTable As DataTable
     Dim nameStart As Long
@@ -120,11 +232,11 @@ Public Function Deserialize(json As String) As DataTable
         Err.Raise 517, "JsonSerializer.Deserialize", "JSON string must be valid JSON format."
     End If
 
-    If InStr(json, "rows:") = 0 Then
+    If InStr(json, """rows""") = 0 Then
         Err.Raise 517, "JsonSerializer.Deserialize", "JSON string must be valid JSON format."
     End If
 
-    If InStr(json, "columns:") = 0 Then
+    If InStr(json, """columns""") = 0 Then
         Err.Raise 517, "JsonSerializer.Deserialize", "JSON string must be valid JSON format."
     End If
 
@@ -145,23 +257,44 @@ Public Function Deserialize(json As String) As DataTable
     nameStart = InStr(json, """name"":")
 
     If nameStart > 0 Then
-        nameStart = InStr(nameStart, json, """") + 1
-        nameEnd = InStr(nameStart, json, """")
-        tableName = Mid(json, nameStart, nameEnd - nameStart)
+        nameStart = InStr(nameStart, json, """")
+
+        If nameStart = 0 Then
+            Err.Raise 517, "JsonSerializer.Deserialize", "Invalid JSON: malformed name property"
+        End If
+        
+        nameEnd = InStr(nameStart + 1, json, """")
+
+        If nameEnd = 0 Then
+            Err.Raise 517, "JsonSerializer.Deserialize", "Invalid JSON: malformed name property"
+        End If
+
+        tableName = Mid(json, nameStart + 1, nameEnd - nameStart - 1)
         dataTable.Name = tableName
     Else
         dataTable.Name = "Table1"
     End If
 
     ' Process the columns next
-    columnsStart = InStr(json, """columns"": [")
+    columnsStart = InStr(json, """columns""")
 
     If columnsStart > 0 Then
-        columnsStart = InStr(columnsStart, json, "[") + 1
+        columnsStart = InStr(columnsStart, json, "[")
+
+        If columnsStart = 0 Then
+            Err.Raise 517, "JsonSerializer.Deserialize", "Invalid JSON: malformed columns property."
+        End If
+
+        columnsStart = columnsStart + 1
         columnsEnd = InStr(columnsStart, json, "]")
+
+        If columnsEnd = 0 Then
+            Err.Raise 517, "JsonSerializer.Deserialize", "Invalid JSON: malformed columns property."
+        End If
+
         columnsJson = Mid(json, columnsStart, columnsEnd - columnsStart)
     Else
-        Err.Raise 517, "JsonSerializer.Deserialize", "JSON string must be valid JSON format."
+        Err.Raise 517, "JsonSerializer.Deserialize", "Invalid JSON: malformed columns property."
     End If
 
     Set columns = DeserializeColumns(columnsJson)
@@ -171,14 +304,25 @@ Public Function Deserialize(json As String) As DataTable
     Next col
 
     ' Process the rows next
-    rowsStart = InStr(json, """rows"": [")
+    rowsStart = InStr(json, """rows""")
 
     If rowsStart > 0 Then
-        rowsStart = InStr(rowsStart, json, "[") + 1
+        rowsStart = InStr(rowsStart, json, "[")
+
+        If rowsStart = 0 Then
+            Err.Raise 517, "JsonSerializer.Deserialize", "Invalid JSON: malformed rows property."
+        End If
+
+        rowsStart = rowsStart + 1
         rowsEnd = InStr(rowsStart, json, "]")
+
+        If rowsEnd = 0 Then
+            Err.Raise 517, "JsonSerializer.Deserialize", "Invalid JSON: malformed rows property."
+        End If
+
         rowsJson = Mid(json, rowsStart, rowsEnd - rowsStart)
     Else
-        Err.Raise 517, "JsonSerializer.Deserialize", "JSON string must be valid JSON format."
+        Err.Raise 517, "JsonSerializer.Deserialize", "Invalid JSON: malformed rows property."
     End If
 
     Set rows = DeserializeRows(rowsJson, dataTable)
@@ -189,6 +333,373 @@ Public Function Deserialize(json As String) As DataTable
 
     Set Deserialize = dataTable
 
+End Function
+
+'''<summary>
+''' Deserializes JSON string into an array of DataColumn objects
+'''</summary>
+'''<param name="columnsJson">The JSON string representing the columns</param>
+'''<returns>An array of DataColumn objects</returns>
+Private Function DeserializeColumns(columnsJson As String) As DataColumn()
+    Dim columns() As DataColumn
+    Dim objects() As String
+    Dim i As Long, j As Long
+    Dim char As String
+    Dim inQuote As Boolean
+    Dim braceDepth As Integer
+    Dim currentObject As String
+    
+    i = 1
+    braceDepth = 0
+    inQuote = False
+    currentObject = ""
+    
+    Do While i <= Len(columnsJson)
+        char = Mid(columnsJson, i, 1)
+        
+        If char = """" Then 
+            inQuote = Not inQuote
+        End If
+        
+        If Not inQuote Then
+            If char = "{" Then
+                braceDepth = braceDepth + 1
+                currentObject = currentObject & char
+            ElseIf char = "}" Then
+                currentObject = currentObject & char
+                braceDepth = braceDepth - 1
+                
+                If braceDepth = 0 Then
+                    If IsEmpty(objects) Then
+                        ReDim objects(0)
+                    Else
+                        ReDim Preserve objects(0 To UBound(objects) + 1)
+                    End If
+
+                    objects(UBound(objects)) = currentObject
+                    currentObject = ""
+                End If
+            ElseIf braceDepth > 0 Then
+                currentObject = currentObject & char
+            End If
+        ElseIf braceDepth > 0 Then
+            currentObject = currentObject & char
+        End If
+        
+        i = i + 1
+    Loop
+    
+    If Not IsEmpty(objects) Then
+        ReDim columns(0 To UBound(objects))
+        
+        For i = 0 To UBound(objects)
+            Set columns(i) = DeserializeColumn(objects(i))
+        Next i
+    Else
+        ReDim columns(-1)
+    End If
+    
+    Set DeserializeColumns = columns
+End Function
+
+'''<summary>
+''' Deserializes a single JSON column object into a DataColumn
+'''</summary>
+'''<param name="objectJson">The JSON string representing the column</param>
+'''<returns>A DataColumn object</returns>
+Private Function DeserializeColumn(objectJson As String) As DataColumn
+    Dim col As DataColumn
+    Dim nameStart As Long, nameEnd As Long
+    Dim typeStart As Long, typeEnd As Long
+    
+    Set col = New DataColumn
+    
+    nameStart = InStr(objectJson, """name"":")
+
+    If nameStart > 0 Then
+        nameStart = InStr(nameStart, objectJson, """")
+
+        If nameStart = 0 Then
+            Err.Raise 517, "JsonSerializer.DeserializeColumn", _
+                "Invalid column JSON: malformed name property"
+        End If
+
+        nameStart = nameStart + 1
+        nameEnd = InStr(nameStart, objectJson, """")
+
+        If nameEnd = 0 Then
+            Err.Raise 517, "JsonSerializer.DeserializeColumn", _
+                "Invalid column JSON: malformed name property"
+        End If
+
+        col.Name = Trim(Mid(objectJson, nameStart, nameEnd - nameStart))
+    Else
+        Err.Raise 517, "JsonSerializer.DeserializeColumn", _
+            "Invalid column JSON: missing 'name' property"
+    End If
+    
+    typeStart = InStr(objectJson, """dataType"":")
+
+    If typeStart > 0 Then
+        typeStart = InStr(typeStart, objectJson, """")
+        
+        If typeStart = 0 Then
+            Err.Raise 517, "JsonSerializer.DeserializeColumn", _
+                "Invalid column JSON: malformed dataType property"
+        End If
+
+        typeStart = typeStart + 1
+        typeEnd = InStr(typeStart, objectJson, """")
+
+        If typeEnd = 0 Then
+            Err.Raise 517, "JsonSerializer.DeserializeColumn", _
+                "Invalid column JSON: malformed dataType property"
+        End If
+        
+        col.DataType = StringToVbType(Trim(Mid(objectJson, typeStart, typeEnd - typeStart)))
+    Else
+        Err.Raise 517, "JsonSerializer.DeserializeColumn", _
+            "Invalid column JSON: missing 'dataType' property"
+    End If
+    
+    Set DeserializeColumn = col
+End Function
+
+'''<summary>
+''' Deserializes JSON string of DataRow objects, comma separated into an array of DataRow objects
+'''</summary>
+'''<param name="rowsJson">The JSON string representing the rows</param>
+'''<param name="dataTable">The DataTable to which the rows belong</param>
+'''<returns>An array of DataRow objects</returns>
+Private Function DeserializeRows(rowsJson As String, dataTable As DataTable) As DataRow()
+    Dim rows() As DataRow
+    Dim objects() As String
+    Dim inObject As Boolean
+    Dim inQuotedString As Boolean
+    Dim i As Long
+    Dim char As String
+    Dim currentObject As String
+    Dim objectNesting As Integer
+    Dim braceBalance As Integer 
+    Dim row As DataRow
+
+    If rowsJson = "" Or IsNull(rowsJson) Then
+        ReDim rows(-1)
+        Set DeserializeRows = rows
+        
+        Exit Function
+    End If
+
+    inObject = False
+    inQuotedString = False
+    currentObject = ""
+    i = 1
+    objectNesting = 0
+    braceBalance = 0
+
+    Do While i <= Len(rowsJson)
+        char = Mid(rowsJson, i, 1)
+
+        ' Handle quotes
+        If char = """" Then
+            inQuotedString = Not inQuotedString
+            If inObject Then currentObject = currentObject & char
+        End If
+
+        If Not inQuotedString Then
+            If char = "{" Then
+                braceBalance = braceBalance + 1
+                inObject = True
+                currentObject = currentObject & char
+                objectNesting = objectNesting + 1
+                
+            ElseIf char = "}" Then
+                braceBalance = braceBalance - 1
+                
+                ' Check for negative balance
+                If braceBalance < 0 Then
+                    Err.Raise 517, "JsonSerializer.DeserializeRows", _
+                        "Invalid JSON: Unexpected closing brace at position " & i
+                End If
+                
+                currentObject = currentObject & char
+                objectNesting = objectNesting - 1
+
+                If objectNesting = 0 Then
+                    inObject = False
+
+                    ' Completed an object, add to objects array
+                    If IsEmpty(objects) Then
+                        ReDim objects(0)
+                    Else
+                        ReDim Preserve objects(0 To UBound(objects) + 1)
+                    End If
+
+                    objects(UBound(objects)) = currentObject
+                    currentObject = ""
+                End If
+            Else
+                If inObject Then
+                    currentObject = currentObject & char
+                End If
+            End If
+        End If
+
+        i = i + 1
+    Loop
+
+    ' Validate final balance
+    If braceBalance <> 0 Then
+        Err.Raise 517, "JsonSerializer.DeserializeRows", _
+            "Invalid JSON: Unclosed braces (missing " & Abs(braceBalance) & " closing brace(s))"
+    End If
+
+    ' Now parse each object into DataRow
+    If Not IsEmpty(objects) Then
+        If UBound(objects) < 0 Then
+            ReDim rows(-1)
+        Else
+            ReDim rows(0 To UBound(objects))
+            For i = 0 To UBound(objects)
+                Set rows(i) = DeserializeRow(objects(i), dataTable)
+            Next i
+        End If
+    Else
+        ReDim rows(-1)
+    End If
+
+    DeserializeRows = rows
+End Function
+
+'''<summary>
+''' Deserializes a single JSON row object into a DataRow
+'''</summary>
+'''<param name="rowJson">The JSON string representing the row</param>
+'''<param name="dataTable">The DataTable to which the row belongs</param>
+'''<returns>A DataRow object</returns>
+Private Function DeserializeRow(rowJson As String, dataTable As DataTable) As DataRow    
+    Dim row As DataRow
+    Dim col As DataColumn
+    Dim j As Long, k As Long
+    Dim currentKey As String
+    Dim currentValue As String
+    Dim char As String
+    Dim colIndex As Long
+    Dim inKey As Boolean
+    Dim inValue As Boolean
+    Dim inValueQuoted As Boolean
+    Dim backslashCount As Long
+
+    Set row = New DataRow
+    inKey = False
+    inValue = False
+    inValueQuoted = False
+    currentKey = ""
+    currentValue = ""
+    colIndex = -1
+
+    For j = 1 To Len(rowJson)
+        char = Mid(rowJson, j, 1)
+
+        ' Count consecutive backslashes before this quote
+        If char = """" Then
+            backslashCount = 0
+            k = j - 1
+
+            Do While k >= 1 And Mid(rowJson, k, 1) = "\"
+                backslashCount = backslashCount + 1
+                k = k - 1
+            Loop
+        End If
+        
+        ' Odd number of backslashes = escaped quote
+        Dim isEscapedQuote As Boolean
+        isEscapedQuote = (char = """" And (backslashCount Mod 2 = 1))
+
+        If char = """" And Not isEscapedQuote Then
+            If inValue Then
+                ' This is a string delimiter (open or close)
+                inValueQuoted = Not inValueQuoted
+                currentValue = currentValue & char
+            Else
+                inKey = Not inKey
+
+                If inKey Then
+                    currentKey = ""
+                Else
+                    colIndex = dataTable.GetColumnOrdinalByName(Replace(currentKey, """", ""))
+
+                    If colIndex = -1 Then
+                        Err.Raise 518, "JsonSerializer.DeserializeRow", _
+                            "Column '" & Replace(currentKey, """", "") & "' not found in DataTable."
+                    End If
+                End If
+            End If
+        ElseIf char = ":" And Not inKey And Not inValueQuoted Then
+            inValue = True
+            currentValue = ""
+        ElseIf (char = "," Or char = "}") And Not inKey And Not inValueQuoted Then
+            If colIndex >= 0 Then
+                Set col = dataTable.Columns(colIndex)
+                
+                ' Remove whitespace
+                currentValue = Trim(currentValue)
+
+                If LCase(currentValue) = "null" Or currentValue = "" Then
+                    row.SetValue colIndex, Null
+                Else
+                    Select Case col.DataType
+                        Case vbBoolean
+                            If LCase(currentValue) = "true" Then
+                                row.SetValue colIndex, True
+                            ElseIf LCase(currentValue) = "false" Then
+                                row.SetValue colIndex, False
+                            Else
+                                Err.Raise 518, "JsonSerializer.DeserializeRow", _
+                                    "Invalid boolean value '" & currentValue & "' for column '" & col.Name & "'."
+                            End If
+                        Case vbInteger, vbLong, vbSingle, vbDouble, vbCurrency, vbDecimal
+                            ' Strip quotes if present
+                            If Left(currentValue, 1) = """" Then
+                                currentValue = Mid(currentValue, 2)
+                            End If
+
+                            If Right(currentValue, 1) = """" Then
+                                currentValue = Left(currentValue, Len(currentValue) - 1)
+                            End If
+
+                            row.SetValue colIndex, CDbl(currentValue)
+                        Case Else
+                            ' Trim outer quotes
+                            If Left(currentValue, 1) = """" Then
+                                currentValue = Mid(currentValue, 2)
+                            End If
+
+                            If Right(currentValue, 1) = """" Then
+                                currentValue = Left(currentValue, Len(currentValue) - 1)
+                            End If
+
+                            ' Unescape
+                            currentValue = Replace(currentValue, "\""", """")
+                            currentValue = Replace(currentValue, "\\", "\")
+
+                            row.SetValue colIndex, currentValue
+                    End Select
+                End If
+            End If
+
+            currentKey = ""
+            currentValue = ""
+            inValue = False
+        ElseIf inKey Then
+            currentKey = currentKey & char
+        ElseIf inValue Then
+            currentValue = currentValue & char
+        End If
+    Next j
+
+    Set DeserializeRow = row
+    
 End Function
 
 '========================================
@@ -215,93 +726,51 @@ Private Function EscapeJson(value As String) As String
 End Function
 
 '''<summary>
-''' Serializes the columns of a DataTable into JSON format
-'''</summary>
-'''<param name="dataTable">The DataTable containing the columns to serialize</param>
-'''<returns>A JSON string representing the columns</returns>
-Private Function SerializeColumns(dataTable As DataTable) As String
-    Dim json As String
-    Dim i As Long
-    Dim column As DataColumn
+''' Converts a VB data type to its string representation
+''' </summary>
+''' <param name="vbType">The VB data type</param>
+''' <returns>The string representation of the data type</returns>
+Private Function VbTypeToString(vbType As VbVarType) As String
+    'Reference: https://learn.microsoft.com/en-us/office/vba/language/concepts/getting-started/vartype-constants
 
-    json = "["
-
-    For i = 0 To dataTable.ColumnCount() - 1
-        Set column = dataTable.Columns(i)
-
-        json = json & vbCrLf & "  {"
-        json = json & """name"": """ & EscapeJson(column.Name) & """," & vbCrLf
-        json = json & """dataType"": """ & EscapeJson(column.DataType) & """" & vbCrLf
-        json = json & "}"
-
-        If i < dataTable.Columns.Count - 1 Then
-            json = json & ","
-        End If
-    Next i
-
-    json = json & vbCrLf & "]"
-
-    SerializeColumns = json
+    Select Case vbType
+        Case vbEmpty: VbTypeToString = "object"
+        Case vbNull: VbTypeToString = "object"
+        Case vbInteger: VbTypeToString = "int"
+        Case vbLong: VbTypeToString = "long"
+        Case vbSingle: VbTypeToString = "decimal"
+        Case vbDouble: VbTypeToString = "decimal"
+        Case vbCurrency: VbTypeToString = "decimal"
+        Case vbDate: VbTypeToString = "date"
+        Case vbString: VbTypeToString = "string"
+        Case vbObject: VbTypeToString = "object"
+        Case vbBoolean: VbTypeToString = "boolean"
+        Case vbVariant: VbTypeToString = "object"
+        Case vbDecimal: VbTypeToString = "decimal"
+        Case vbByte: VbTypeToString = "int"
+        Case vbLongLong: VbTypeToString = "long"
+        Case vbUserDefinedType: VbTypeToString = "object"
+        Case vbArray: VbTypeToString = "object"
+        Case Else: VbTypeToString = "object"
+    End Select
 End Function
 
 '''<summary>
-''' Serializes the rows of a DataTable into JSON format
-'''</summary>
-'''<param name="dataTable">The DataTable containing the rows to serialize</param>
-'''<returns>A JSON string representing the rows</returns>
-Private Function SerializeRows(dataTable As DataTable) As String
-    Dim json As String
-    Dim i As Long
-    Dim j As Long
-    Dim row As DataRow
-    Dim cell As DataCell
-    Dim column As DataColumn
-
-    json = "["
-
-    For i = 0 To dataTable.RowCount() - 1
-        Set row = dataTable.Rows(i)
-
-        json = json & vbCrLf & "  {"
-
-        For j = 0 To dataTable.ColumnCount() - 1
-            Set cell = row.GetValue(j)
-            Set column = dataTable.Columns(j)
-
-            json = json & """" & EscapeJson(column.Name) & """: "
-
-            If IsNull(cell) Or IsEmpty(cell) Then
-                json = json & "null"
-            Else
-                Select Case column.DataType
-                    Case vbBoolean
-                        If SafeBooleanConvert(cell) Then
-                            json = json & "true"
-                        Else
-                            json = json & "false"
-                        End If
-                    Case vbInteger, vbLong, vbSingle, vbDouble, vbCurrency, vbDecimal
-                        json = json & CStr(cell)
-                    Case Else
-                        json = json & """" & EscapeJson(CStr(cell)) & """"
-                End Select
-            End If
-
-            If j < dataTable.ColumnCount() - 1 Then
-                json = json & ", "
-            End If
-        Next j
-
-        json = json & "}"
-
-        If i < dataTable.RowCount() - 1 Then
-            json = json & ","
-        End If
-    Next i
-
-    json = json & vbCrLf & "]"
-
-    SerializeRows = json
+''' Converts a string representation of a data type to its VB data type
+''' </summary>
+''' <param name="typeString">The string representation of the data type</param>
+''' <returns>The VB data type</returns>
+Private Function StringToVbType(typeString As String) As VbVarType
+    Select Case LCase(typeString)
+        Case "object": StringToVbType = vbVariant
+        Case "int": StringToVbType = vbInteger
+        Case "long": StringToVbType = vbLong
+        Case "decimal": StringToVbType = vbDouble
+        Case "date": StringToVbType = vbDate
+        Case "string": StringToVbType = vbString
+        Case "boolean": StringToVbType = vbBoolean
+        Case Else: StringToVbType = vbVariant
+    End Select
 End Function
 
 '''<summary>
@@ -323,131 +792,10 @@ Private Function SafeBooleanConvert(value As Variant) As Boolean
 End Function
 
 '''<summary>
-''' Deserializes JSON string into an array of DataColumn objects
+''' Flattens a JSON string by removing line breaks and extra spaces
 '''</summary>
-'''<param name="columnsJson">The JSON string representing the columns</param>
-'''<returns>An array of DataColumn objects</returns>
-Private Function DeserializeColumns(columnsJson As String) As DataColumn()
-    ' Columns Json:
-    ' [
-    '   {
-    '       "name": "ColumnName",
-    '       "dataType": "vbString"
-    '   },
-    ' ...
-    ' ]
-
-    Dim columns() As DataColumn
-    Dim inColumnsArray As Boolean
-    Dim inColumnObject As Boolean
-    Dim inQuotedString As Boolean
-    Dim currentColumn As DataColumn
-    Dim i As Long
-    Dim char As String
-    Dim propName As String
-    Dim propValue As String
-    Dim propStart As Long
-    Dim propEnd As Long
-    Dim jsonBlock As String
-
-    If Trim(columnsJson) = "" Then
-        ' Return empty array if no columns
-        ReDim columns(-1)
-        Set DeserializeColumns = columns
-        Exit Function
-    End If
-
-    'Flatten string to remove any line breaks or extra spaces
-    columnsJson = FlattenJsonString(columnsJson)
-
-    '  Must start with opening bracket
-    If Left(columnsJson, 1) <> "[" Then
-        Err.Raise 517, "JsonSerializer.DeserializeColumns", "JSON string must be valid JSON format."
-    End If
-
-    i = 1
-    inColumnsArray = False
-    inColumnObject = False
-    inQuotedString = False
-    Set currentColumn = Nothing
-    jsonBlock = ""
-
-    Do While i <= Len(columnsJson)
-        char = Mid(columnsJson, i, 1)
-
-        If char = "[" And Not inQuotedString Then
-            inColumnsArray = True
-        ElseIf char = "]" And Not inQuotedString Then
-            inColumnsArray = False
-        ElseIf char = "{" And Not inQuotedString Then
-            inColumnObject = True
-            Set currentColumn = New DataColumn
-        ElseIf char = "}" And Not inQuotedString Then
-            inColumnObject = False
-
-            ' Add the completed column to the array
-            If Not currentColumn Is Nothing Then
-                If IsEmpty(columns) Then
-                    ReDim columns(0)
-                Else
-                    ReDim Preserve columns(0 To UBound(columns) + 1)
-                End If
-
-                Set columns(UBound(columns)) = currentColumn
-                Set currentColumn = Nothing
-            End If
-        ElseIf char = """" Then
-            inQuotedString = Not inQuotedString
-        Else 
-            ' Add char to jsonBlock if needed
-            If inColumnObject Then
-                jsonBlock = jsonBlock & char
-            End If
-        End If
-        
-        If inColumnsArray And Not inColumnObject And Not inQuotedString And jsonBlock <> "" Then
-            ' We've grabbed a column object block, now parse its properties
-            If InStr(jsonBlock, """name""") Then
-                propStart = InStr(jsonBlock, """name""") + 1
-                propEnd = InStr(propStart, jsonBlock, ",")
-
-                If propEnd = 0 Then 
-                    propEnd = Len(jsonBlock) + 1
-                End If
-                
-                propValue = Trim(Mid(columnsJson, propStart, propEnd - propStart))
-                propValue = Replace(propValue, """", "")
-                
-                currentColumn.Name = propValue
-                i = propEnd - 1
-            ElseIf InStr(jsonBlock, """dataType""") Then
-                propStart = InStr(jsonBlock, """dataType""") + 1
-                propEnd = InStr(propStart, jsonBlock, ",")
-
-                If propEnd = 0 Then 
-                    propEnd = InStr(propStart, jsonBlock, "}")
-                End If
-                
-                propValue = Trim(Mid(columnsJson, propStart, propEnd - propStart))
-                propValue = Replace(propValue, """", "")    
-                
-                currentColumn.DataType = CLng(propValue)
-                i = propEnd - 1
-            End If
-        End If
-
-        i = i + 1
-    Loop
-
-    Set DeserializeColumns = columns
-End Function
-
-Private Function DeserializeRows(rowsJson As String, dataTable As DataTable) As DataRow()
-    ' --- IGNORE ---
-    ' WIP: Implementation of DeserializeRows function
-    ' --- IGNORE ---
-End Function
-
+'''<param name="json">The JSON string to flatten</param>
+'''<returns>The flattened JSON string</returns>
 Private Function FlattenJsonString(json As String) As String
     ' Helper function to remove line breaks and extra spaces from JSON string
     json = Replace(json, vbCrLf, "")
