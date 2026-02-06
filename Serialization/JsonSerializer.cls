@@ -38,17 +38,47 @@
 '   517 - JSON string must contain at least one comma
 '   518 - JSON row field count mismatch
 '
+' Features:
+'   - Custom date formatting via DateFormat property (default: "yyyy-MM-dd" ISO 8601)
+'
 ' Usage:
 '   Dim serializer As New JsonSerializer
-'   serializer.IncludeHeaders = True
+'   serializer.DateFormat = "yyyy-MM-dd HH:mm:ss"
 '   Dim json As String
 '   json = serializer.Serialize(myDataTable)
+'   
+'   Dim deserialized As DataTable
+'   Set deserialized = serializer.Deserialize(json)
 '
 ' Author: MegaByteMark
-' Version: 2.0
+' Version: 2.1
 '========================================
 
 Option Explicit
+
+Private dateFormat As String
+
+''' <summary>
+''' Sets the date format string for serialization and deserialization.
+''' Uses VBA Format function syntax (e.g., "yyyy-MM-dd", "dd/MM/yyyy HH:mm:ss")
+''' Defaults to ISO 8601 format: "yyyy-MM-dd"
+''' </summary>
+''' <param name="value">The date format string</param>
+Public Property Let DateFormat(value As String)
+    dateFormat = value
+End Property
+
+''' <summary>
+''' Gets the date format string for serialization and deserialization.
+''' </summary>
+''' <return>The date format string</return>
+Public Property Get DateFormat() As String
+    If dateFormat = "" Then
+        DateFormat = "yyyy-MM-dd"
+    Else
+        DateFormat = dateFormat
+    End If
+End Property
 
 ''' <summary>
 ''' Serializes a DataTable into a JSON string
@@ -171,6 +201,9 @@ Private Function SerializeRows(dataTable As DataTable) As String
                         End If
                     Case vbInteger, vbLong, vbSingle, vbDouble, vbCurrency, vbDecimal
                         parts(partCount) = CStr(cell)
+                        partCount = partCount + 1
+                    Case vbDate
+                        parts(partCount) = """" & EscapeJson(Format(CDate(cell), DateFormat)) & """"
                         partCount = partCount + 1
                     Case Else
                         parts(partCount) = """" & EscapeJson(CStr(cell)) & """"
@@ -669,6 +702,20 @@ Private Function DeserializeRow(rowJson As String, dataTable As DataTable) As Da
                             End If
 
                             row.SetValue colIndex, CDbl(currentValue)
+                        Case vbDate
+                            ' Strip quotes if present
+                            If Left(currentValue, 1) = """" Then
+                                currentValue = Mid(currentValue, 2)
+                            End If
+
+                            If Right(currentValue, 1) = """" Then
+                                currentValue = Left(currentValue, Len(currentValue) - 1)
+                            End If
+
+                            ' Unescape any escaped quotes in the date string
+                            currentValue = Replace(currentValue, "\""", """")
+                            
+                            row.SetValue colIndex, SafeDateConvert(currentValue)
                         Case Else
                             ' Trim outer quotes
                             If Left(currentValue, 1) = """" Then
@@ -788,6 +835,135 @@ Private Function SafeBooleanConvert(value As Variant) As Boolean
         Err.Clear
     End If
 
+    On Error GoTo 0
+End Function
+
+'''<summary>
+''' Parses a date string according to the custom date format (locale-independent)
+'''</summary>
+'''<param name="dateString">The string to parse</param>
+'''<param name="format">The date format string</param>
+'''<returns>A Date value</returns>
+Private Function ParseDateByFormat(dateString As String, format As String) As Variant
+    Dim year As Long, month As Long, day As Long
+    Dim hour As Long, minute As Long, second As Long
+    Dim formatPos As Long, datePos As Long
+    Dim currentDateValue As String
+    
+    ' Initialize defaults
+    year = 1900
+    month = 1
+    day = 1
+    hour = 0
+    minute = 0
+    second = 0
+    
+    On Error GoTo ErrorHandler
+    
+    ' Process format string character by character, matching date string
+    formatPos = 1
+    datePos = 1
+    
+    Do While formatPos <= Len(format) And datePos <= Len(dateString)
+        ' Check for 4-digit year pattern
+        If Mid(format, formatPos, 4) = "yyyy" Then
+            If datePos + 3 > Len(dateString) Then GoTo ErrorHandler
+            currentDateValue = Mid(dateString, datePos, 4)
+            year = CLng(currentDateValue)
+            formatPos = formatPos + 4
+            datePos = datePos + 4
+        
+        ' Check for 2-digit month pattern
+        ElseIf Mid(format, formatPos, 2) = "MM" Then
+            If datePos + 1 > Len(dateString) Then GoTo ErrorHandler
+            currentDateValue = Mid(dateString, datePos, 2)
+            month = CLng(currentDateValue)
+            formatPos = formatPos + 2
+            datePos = datePos + 2
+        
+        ' Check for 2-digit day pattern
+        ElseIf Mid(format, formatPos, 2) = "dd" Then
+            If datePos + 1 > Len(dateString) Then GoTo ErrorHandler
+            currentDateValue = Mid(dateString, datePos, 2)
+            day = CLng(currentDateValue)
+            formatPos = formatPos + 2
+            datePos = datePos + 2
+        
+        ' Check for 2-digit hour pattern (24-hour)
+        ElseIf Mid(format, formatPos, 2) = "HH" Then
+            If datePos + 1 > Len(dateString) Then GoTo ErrorHandler
+            currentDateValue = Mid(dateString, datePos, 2)
+            hour = CLng(currentDateValue)
+            formatPos = formatPos + 2
+            datePos = datePos + 2
+        
+        ' Check for 2-digit hour pattern (12-hour)
+        ElseIf Mid(format, formatPos, 2) = "hh" Then
+            If datePos + 1 > Len(dateString) Then GoTo ErrorHandler
+            currentDateValue = Mid(dateString, datePos, 2)
+            hour = CLng(currentDateValue)
+            formatPos = formatPos + 2
+            datePos = datePos + 2
+        
+        ' Check for 2-digit minute pattern
+        ElseIf Mid(format, formatPos, 2) = "mm" Then
+            If datePos + 1 > Len(dateString) Then GoTo ErrorHandler
+            currentDateValue = Mid(dateString, datePos, 2)
+            minute = CLng(currentDateValue)
+            formatPos = formatPos + 2
+            datePos = datePos + 2
+        
+        ' Check for 2-digit second pattern
+        ElseIf Mid(format, formatPos, 2) = "ss" Then
+            If datePos + 1 > Len(dateString) Then GoTo ErrorHandler
+            currentDateValue = Mid(dateString, datePos, 2)
+            second = CLng(currentDateValue)
+            formatPos = formatPos + 2
+            datePos = datePos + 2
+        
+        ' Non-pattern character (separator like -, /, :, space), skip in both
+        Else
+            formatPos = formatPos + 1
+            datePos = datePos + 1
+        End If
+    Loop
+    
+    ' Validate extracted values
+    If month < 1 Or month > 12 Then GoTo ErrorHandler
+    If day < 1 Or day > 31 Then GoTo ErrorHandler
+    If hour < 0 Or hour > 23 Then GoTo ErrorHandler
+    If minute < 0 Or minute > 59 Then GoTo ErrorHandler
+    If second < 0 Or second > 59 Then GoTo ErrorHandler
+    
+    ' Create the date/time value
+    ParseDateByFormat = DateSerial(year, month, day) + TimeSerial(hour, minute, second)
+    Exit Function
+    
+ErrorHandler:
+    Err.Raise 518, "JsonSerializer.ParseDateByFormat", _
+        "Unable to parse date string '" & dateString & "' using format '" & format & "'."
+    ParseDateByFormat = Null
+End Function
+
+'''<summary>
+''' Safely converts a string to a date using the configured date format (locale-independent)
+'''</summary>
+'''<param name="dateString">The string to convert to a date</param>
+'''<returns>A Date value</returns>
+Private Function SafeDateConvert(dateString As String) As Variant
+    On Error Resume Next
+    
+    Dim result As Variant
+    result = ParseDateByFormat(dateString, DateFormat)
+    
+    If Err.Number <> 0 Then
+        Err.Raise 518, "JsonSerializer.SafeDateConvert", _
+            "Unable to convert '" & dateString & "' to date using format '" & DateFormat & "'."
+        SafeDateConvert = Null
+    Else
+        SafeDateConvert = result
+    End If
+    
     On Error GoTo 0
 End Function
 

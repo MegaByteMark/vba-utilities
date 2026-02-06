@@ -1,9 +1,26 @@
 # Visual Basic for Applications (VBA) Utilities
 
 ## What is this?
-I've recently been working with a Microsoft Access database that was critical to the customers operations and was still actively being developed.
+I've recently been working with a Microsoft Access database that was critical to the customer's operations and was still actively being developed.
 Whilst working on this database it became clear that some of the features we take for granted in modern languages like C# are not available in VBA and there are limited libraries and plugins to support developers.
 This collection of VBA modules was developed in response in an attempt to address some of the challenges I encountered, so that the community can benefit from some simple utility modules.
+
+## Available Modules
+
+### Data Access
+- **SqlServerDataProvider** - Execute queries against SQL Server databases with parameterized query support
+- **SqlConnectionStringBuilder** - Build SQL Server connection strings programmatically
+- **SqlBulkCopy** - Bulk insert operations for efficient data loading
+- **DataTable, DataRow, DataColumn, DataSet** - ADO.NET-like data abstraction layer for working with in-memory data structures
+
+### Serialization
+- **JsonSerializer** - Serialize and deserialize DataTable objects to/from JSON format
+- **CsvSerializer** - Serialize and deserialize DataTable objects to/from CSV format
+
+### Utilities
+- **StringCollection** - Collection class for working with strings
+- **WindowsEventLog** - Read and write to Windows Event Log
+- **WindowsImpersonation** - Impersonate different Windows users for elevated operations
 
 ## Installation
 
@@ -18,8 +35,8 @@ To install any of the modules e.g. SqlServerDataProvider, you need to import the
 .cls was selected as the format for this repo because it requires the least administrative burden for MS Access developers.
 
 Alternatives:
-* C++ DLL - requires regsvr32 registration that requires elevated privleges often disabled on CyberSecurity conscious organisations.
-* .NET DLL - requires the .NET runtime to be installed on the host machine, which requires elevated priviledges. Or, bundling the .NET runtime with the assembly, bloating the library footprint.
+* C++ DLL - requires regsvr32 registration that requires elevated privileges often disabled on CyberSecurity conscious organisations.
+* .NET DLL - requires the .NET runtime to be installed on the host machine, which requires elevated privileges. Or, bundling the .NET runtime with the assembly, bloating the library footprint.
 
 However, if enough community support of a DLL is raised, they can be developed on a further version.
 
@@ -33,6 +50,7 @@ Dim clsProvider As SqlServerDataProvider
 
 Set clsProvider = New SqlServerDataProvider
 
+' Initialize with connection string, connection timeout (seconds), and command timeout (seconds)
 clsProvider.Initialize "Provider=SQLOLEDB;Data Source=localhost;Initial Catalog=test;User ID=test;Password=test;", 0, 30
 
 ' Code removed for brevity...
@@ -86,7 +104,12 @@ dictParams.Add "p1", 1
 Set rs = clsProvider.GetRecordset("SELECT * FROM dbo.test1 WHERE ID=@p1;",dictParams)
 rs.Open
 
-'...
+' Iterate through the recordset
+Do While Not rs.EOF
+    Debug.Print rs.Fields("ID").Value
+    Debug.Print rs.Fields("Name").Value
+    rs.MoveNext
+Loop
 
 clsProvider.CleanUpRecordset rs
 
@@ -125,9 +148,7 @@ clsProvider.CleanUpRecordset rs
 ```
 
 ## Contributing
-We welcome contributions to this
-
- project! If you have an idea for a new feature or have found a bug, please open an issue on GitHub. If you would like to contribute code, feel free to fork the repository and submit a pull request. Make sure to follow our coding guidelines and include tests for any new features or bug fixes.
+We welcome contributions to this project! If you have an idea for a new feature or have found a bug, please open an issue on GitHub. If you would like to contribute code, feel free to fork the repository and submit a pull request. Make sure to follow the coding guidelines in each module header and test your changes in an Access database before submitting.
 
 ## License
 
