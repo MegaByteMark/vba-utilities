@@ -57,6 +57,7 @@
 Option Explicit
 
 Private dateFormat As String
+Private minificationEnabled As Boolean
 
 ''' <summary>
 ''' Sets the date format string for serialization and deserialization.
@@ -81,11 +82,41 @@ Public Property Get DateFormat() As String
 End Property
 
 ''' <summary>
+''' Enables or disables minification of the JSON output. When enabled, the serializer will remove all unnecessary whitespace from the JSON string.
+''' This can reduce the size of the output but may make it less human-readable. Defaults to False (minification disabled).
+''' </summary>
+''' <param name="value">True to enable minification, False to disable</param>
+Public Property Let MinificationEnabled(value As Boolean)
+    minificationEnabled = value
+End Property
+
+''' <summary>
+''' Gets the current setting for JSON minification.
+''' </summary>
+''' <return>True if minification is enabled, False otherwise</return>
+Public Property Get MinificationEnabled() As Boolean
+    MinificationEnabled = minificationEnabled
+End Property
+
+'''<summary>
+''' Adds a line break to the JSON string if minification is disabled
+''' </summary>
+''' <param name="json">The JSON string to potentially add a line break to</param>
+''' <returns>The JSON string with or without a line break, depending on the minification setting</returns>
+Private Function AddLineBreak() As String
+    If minificationEnabled Then
+        AddLineBreak = ""
+    Else
+        AddLineBreak = vbCrLf
+    End If
+End Function
+
+''' <summary>
 ''' Serializes a DataTable into a JSON string
 ''' </summary>
 ''' <param name="dataTable">The DataTable to serialize</param>
 ''' <returns>A JSON string representing the DataTable</returns>
-Public Function Serialize(dataTable As DataTable) As String        
+Public Function SerializeDataTable(dataTable As DataTable) As String        
     Dim json As String
     Dim i As Long, j As Long
     Dim row As DataRow
@@ -94,11 +125,11 @@ Public Function Serialize(dataTable As DataTable) As String
 
     ' Error Handling
     If dataTable Is Nothing Then
-        Err.Raise 513, "JsonSerializer.Serialize", "DataTable cannot be Nothing."
+        Err.Raise 513, "JsonSerializer.SerializeDataTable", "DataTable cannot be Nothing."
     End If
     
     If dataTable.Columns.Count = 0 Then
-        Err.Raise 514, "JsonSerializer.Serialize", "DataTable must have at least one column."
+        Err.Raise 514, "JsonSerializer.SerializeDataTable", "DataTable must have at least one column."
     End If
 
     If dataTable.Rows.Count > 0 Then
@@ -109,19 +140,19 @@ Public Function Serialize(dataTable As DataTable) As String
             Set row = dataTable.Rows(i)
 
             If row.Cells.Count <> columnCount Then
-                Err.Raise 518, "JsonSerializer.Serialize", "JSON row field count mismatch, row " & CStr(i) & "."
+                Err.Raise 518, "JsonSerializer.SerializeDataTable", "JSON row field count mismatch, row " & CStr(i) & "."
                 Exit Function
             End If
         Next i
     End If
     
-    json = "{" & vbCrLf
-    json = json & " ""name"": """ & EscapeJson(dataTable.Name) & """" & vbCrLf
-    json = json & ", ""columns"": " & SerializeColumns(dataTable) & vbCrLf
-    json = json & ", ""rows"": " & SerializeRows(dataTable) & vbCrLf
+    json = "{" & AddLineBreak()
+    json = json & " ""name"": """ & EscapeJson(dataTable.Name) & """" & AddLineBreak()
+    json = json & ", ""columns"": " & SerializeColumns(dataTable) & AddLineBreak()
+    json = json & ", ""rows"": " & SerializeRows(dataTable) & AddLineBreak()
     json = json & "}"
 
-    Serialize = json
+    SerializeDataTable = json
 End Function
 
 '''<summary>
@@ -139,9 +170,9 @@ Private Function SerializeColumns(dataTable As DataTable) As String
     For i = 0 To dataTable.ColumnCount() - 1
         Set column = dataTable.Columns(i)
 
-        json = json & vbCrLf & "  {"
-        json = json & """name"": """ & EscapeJson(column.Name) & """," & vbCrLf
-        json = json & """dataType"": """ & EscapeJson(VbTypeToString(column.DataType)) & """" & vbCrLf
+        json = json & AddLineBreak() & "  {"
+        json = json & """name"": """ & EscapeJson(column.Name) & """," & AddLineBreak()
+        json = json & """dataType"": """ & EscapeJson(VbTypeToString(column.DataType)) & """" & AddLineBreak()
         json = json & "}"
 
         If i < dataTable.ColumnCount() - 1 Then
@@ -149,7 +180,7 @@ Private Function SerializeColumns(dataTable As DataTable) As String
         End If
     Next i
 
-    json = json & vbCrLf & "]"
+    json = json & AddLineBreak() & "]"
 
     SerializeColumns = json
 End Function
@@ -177,7 +208,7 @@ Private Function SerializeRows(dataTable As DataTable) As String
     For i = 0 To dataTable.RowCount() - 1
         Set row = dataTable.Rows(i)
 
-        parts(partCount) = vbCrLf & "  {"
+        parts(partCount) = AddLineBreak() & "  {"
 
         For j = 0 To dataTable.ColumnCount() - 1
             Set cell = row.GetValue(j)
@@ -217,7 +248,7 @@ Private Function SerializeRows(dataTable As DataTable) As String
             End If
         Next j
 
-        parts(partCount) = vbCrLf & "  }"
+        parts(partCount) = AddLineBreak() & "  }"
         partCount = partCount + 1
 
         If i < dataTable.RowCount() - 1 Then
@@ -226,7 +257,7 @@ Private Function SerializeRows(dataTable As DataTable) As String
         End If
     Next i
 
-    parts(partCount) = vbCrLf & "]"
+    parts(partCount) = AddLineBreak() & "]"
     partCount = partCount + 1
 
     json = Join(parts, "", 0, partCount)
@@ -239,7 +270,7 @@ End Function
 ''' </summary>
 ''' <param name="json">The JSON string to deserialize</param>
 ''' <returns>A DataTable represented by the JSON string</returns>
-Public Function Deserialize(json As String) As DataTable
+Public Function DeserializeDataTable(json As String) As DataTable
     Dim dataTable As DataTable
     Dim nameStart As Long
     Dim nameEnd As Long
@@ -254,23 +285,23 @@ Public Function Deserialize(json As String) As DataTable
     Dim rows() As DataRow
 
     If IsNull(json) Then
-        Err.Raise 515, "JsonSerializer.Deserialize", "JSON string cannot be Nothing."
+        Err.Raise 515, "JsonSerializer.DeserializeDataTable", "JSON string cannot be Nothing."
     End If
 
     If Trim(json) = "" Then
-        Err.Raise 516, "JsonSerializer.Deserialize", "JSON string cannot be empty."
+        Err.Raise 516, "JsonSerializer.DeserializeDataTable", "JSON string cannot be empty."
     End If
 
     If InStr(json, "{") = 0 Then
-        Err.Raise 517, "JsonSerializer.Deserialize", "JSON string must be valid JSON format."
+        Err.Raise 517, "JsonSerializer.DeserializeDataTable", "JSON string must be valid JSON format."
     End If
 
     If InStr(json, """rows""") = 0 Then
-        Err.Raise 517, "JsonSerializer.Deserialize", "JSON string must be valid JSON format."
+        Err.Raise 517, "JsonSerializer.DeserializeDataTable", "JSON string must be valid JSON format."
     End If
 
     If InStr(json, """columns""") = 0 Then
-        Err.Raise 517, "JsonSerializer.Deserialize", "JSON string must be valid JSON format."
+        Err.Raise 517, "JsonSerializer.DeserializeDataTable", "JSON string must be valid JSON format."
     End If
 
     ' Flatten string to remove any line breaks or extra spaces
@@ -278,7 +309,7 @@ Public Function Deserialize(json As String) As DataTable
 
     'Has to start with an opening brace
     If Left(json, 1) <> "{" Then
-        Err.Raise 517, "JsonSerializer.Deserialize", "JSON string must be valid JSON format."
+        Err.Raise 517, "JsonSerializer.DeserializeDataTable", "JSON string must be valid JSON format."
     End If
 
     Set dataTable = New DataTable
@@ -293,13 +324,13 @@ Public Function Deserialize(json As String) As DataTable
         nameStart = InStr(nameStart, json, """")
 
         If nameStart = 0 Then
-            Err.Raise 517, "JsonSerializer.Deserialize", "Invalid JSON: malformed name property"
+            Err.Raise 517, "JsonSerializer.DeserializeDataTable", "Invalid JSON: malformed name property"
         End If
         
         nameEnd = InStr(nameStart + 1, json, """")
 
         If nameEnd = 0 Then
-            Err.Raise 517, "JsonSerializer.Deserialize", "Invalid JSON: malformed name property"
+            Err.Raise 517, "JsonSerializer.DeserializeDataTable", "Invalid JSON: malformed name property"
         End If
 
         tableName = Mid(json, nameStart + 1, nameEnd - nameStart - 1)
@@ -315,19 +346,19 @@ Public Function Deserialize(json As String) As DataTable
         columnsStart = InStr(columnsStart, json, "[")
 
         If columnsStart = 0 Then
-            Err.Raise 517, "JsonSerializer.Deserialize", "Invalid JSON: malformed columns property."
+            Err.Raise 517, "JsonSerializer.DeserializeDataTable", "Invalid JSON: malformed columns property."
         End If
 
         columnsStart = columnsStart + 1
         columnsEnd = InStr(columnsStart, json, "]")
 
         If columnsEnd = 0 Then
-            Err.Raise 517, "JsonSerializer.Deserialize", "Invalid JSON: malformed columns property."
+            Err.Raise 517, "JsonSerializer.DeserializeDataTable", "Invalid JSON: malformed columns property."
         End If
 
         columnsJson = Mid(json, columnsStart, columnsEnd - columnsStart)
     Else
-        Err.Raise 517, "JsonSerializer.Deserialize", "Invalid JSON: malformed columns property."
+        Err.Raise 517, "JsonSerializer.DeserializeDataTable", "Invalid JSON: malformed columns property."
     End If
 
     Set columns = DeserializeColumns(columnsJson)
@@ -343,19 +374,19 @@ Public Function Deserialize(json As String) As DataTable
         rowsStart = InStr(rowsStart, json, "[")
 
         If rowsStart = 0 Then
-            Err.Raise 517, "JsonSerializer.Deserialize", "Invalid JSON: malformed rows property."
+            Err.Raise 517, "JsonSerializer.DeserializeDataTable", "Invalid JSON: malformed rows property."
         End If
 
         rowsStart = rowsStart + 1
         rowsEnd = InStr(rowsStart, json, "]")
 
         If rowsEnd = 0 Then
-            Err.Raise 517, "JsonSerializer.Deserialize", "Invalid JSON: malformed rows property."
+            Err.Raise 517, "JsonSerializer.DeserializeDataTable", "Invalid JSON: malformed rows property."
         End If
 
         rowsJson = Mid(json, rowsStart, rowsEnd - rowsStart)
     Else
-        Err.Raise 517, "JsonSerializer.Deserialize", "Invalid JSON: malformed rows property."
+        Err.Raise 517, "JsonSerializer.DeserializeDataTable", "Invalid JSON: malformed rows property."
     End If
 
     Set rows = DeserializeRows(rowsJson, dataTable)
@@ -364,7 +395,7 @@ Public Function Deserialize(json As String) As DataTable
         dataTable.AddRow rw
     Next rw
 
-    Set Deserialize = dataTable
+    Set DeserializeDataTable = dataTable
 
 End Function
 
@@ -747,6 +778,244 @@ Private Function DeserializeRow(rowJson As String, dataTable As DataTable) As Da
 
     Set DeserializeRow = row
     
+End Function
+
+'''<summary>
+''' Safely converts a string to a Date, handling errors gracefully
+'''</summary>
+'''<param name="value">The string value to convert</param>
+'''<returns>A Date value, or Null on error</returns>
+Public Function SerializeDictionary(dict As Scripting.Dictionary) As String
+    Dim json As String
+    Dim key As Variant
+    Dim value As Variant
+    Dim parts() As String
+    Dim i As Long
+
+    If dict Is Nothing Then
+        SerializeDictionary = "null"
+        Exit Function
+    End If
+
+    If dict.Count = 0 Then
+        SerializeDictionary = "{}"
+        Exit Function
+    End If
+
+    ReDim parts(0 To dict.Count - 1)
+    i = 0
+
+    For Each key In dict.Keys
+        value = dict(key)
+        parts(i) = """" & EscapeJson(CStr(key)) & """: " & SerializeVariant(value)
+        
+        i = i + 1
+    Next key
+
+    json = "{" & AddLineBreak() & Join(parts, "," & AddLineBreak()) & AddLineBreak() & "}"
+    
+    SerializeDictionary = json
+End Function
+
+'''<summary>
+''' Serializes an array of variants into a JSON array string
+'''</summary>
+'''<param name="arr">The array of variants to serialize</param>
+'''<returns>A JSON string representing the array</returns>
+Public Function SerializeArray(arr As Variant) As String
+    Dim json As String
+    Dim parts() As String
+    Dim i As Long
+
+    If IsNull(arr) Then
+        SerializeArray = "null"
+        Exit Function
+    End If
+
+    If Not IsArray(arr) Then
+        Err.Raise 519, "JsonSerializer.SerializeArray", "Input must be an array."
+    End If
+
+    If (UBound(arr) < LBound(arr)) Then
+        SerializeArray = "[]"
+        Exit Function
+    End If
+
+    ReDim parts(LBound(arr) To UBound(arr))
+
+    For i = LBound(arr) To UBound(arr)
+        parts(i) = SerializeVariant(arr(i))
+    Next i
+
+    SerializeArray = "[" & Join(parts, ",") & "]"
+End Function
+
+'''<summary>
+''' Serializes a Collection of variants into a JSON array string
+'''</summary>
+'''<param name="col">The Collection of variants to serialize</param>
+'''<returns>A JSON string representing the Collection</returns>
+Public Function SerializeCollection(col As Collection) As String
+    Dim json As String
+    Dim parts() As String
+    Dim i As Long
+
+    If col Is Nothing Then
+        SerializeCollection = "null"
+        Exit Function
+    End If
+
+    If col.Count = 0 Then
+        SerializeCollection = "[]"
+        Exit Function
+    End If
+
+    ReDim parts(1 To col.Count)
+
+    For i = 1 To col.Count
+        parts(i) = SerializeVariant(col(i))
+    Next i
+
+    json = "[" & Join(parts, ",") & "]"
+    
+    SerializeCollection = json
+End Function
+
+''''<summary>
+''' Serializes a variant value to a JSON-compatible string representation
+'''</summary>
+'''<param name="value">The variant value to serialize</param>
+'''<returns>A JSON string representing the variant value</returns>
+Private Function SerializeVariant(value As Variant) As String
+    If IsNull(value) Or IsEmpty(value) Then
+        SerializeVariant = "null"
+    ElseIf IsObject(value) Then
+        If TypeName(value) = "DataTable" Then
+            SerializeVariant = SerializeDataTable(value)
+        ElseIf TypeName(value) = "Dictionary" Then
+            SerializeVariant = SerializeDictionary(value)
+        ElseIf TypeName(value) = "Collection" Then
+            SerializeVariant = SerializeCollection(value)
+        Else
+            Err.Raise 520, "JsonSerializer.SerializeVariant", "Unsupported object type: " & TypeName(value)
+        End If
+    ElseIf IsArray(value) Then
+        SerializeVariant = SerializeArray(value)
+    ElseIf VarType(value) = vbBoolean Then
+        SerializeVariant = IIf(value, "true", "false")
+    ElseIf IsNumeric(value) Then
+        SerializeVariant = CStr(value)
+    ElseIf IsDate(value) Then
+        SerializeVariant = """" & Format(value, DateFormat) & """"
+    Else
+        SerializeVariant = """" & EscapeJson(CStr(value)) & """"
+    End If
+End Function
+
+Public Function DeserializeCollection(json As String) As Collection
+    Dim col As Collection
+    Dim items() As String
+    Dim i As Long
+
+    If IsNull(json) Then
+        Set DeserializeCollection = Nothing
+        Exit Function
+    End If
+
+    If Trim(json) = "" Then
+        Set DeserializeCollection = New Collection
+        Exit Function
+    End If
+
+    If Left(Trim(json), 1) <> "[" Then
+        Err.Raise 517, "JsonSerializer.DeserializeCollection", "JSON string must be a JSON array."
+    End If
+
+    ' Flatten string to remove any line breaks or extra spaces
+    json = FlattenJsonString(json)
+
+    ' Remove the surrounding brackets
+    json = Mid(json, 2, Len(json) - 2)
+
+    'TODO - need to prsse the string char by char in csse there are commas in quoted strings.
+
+    Set col = New Collection
+
+    For i = LBound(items) To UBound(items)
+        col.Add DeserializeVariant(Trim(items(i)))
+    Next i
+
+    Set DeserializeCollection = col
+End Function
+
+Public Function DeserializeArray(json As String) As Variant
+    Dim items() As String
+    Dim i As Long
+
+    If IsNull(json) Then
+        DeserializeArray = Null
+        Exit Function
+    End If
+
+    If Trim(json) = "" Then
+        DeserializeArray = Array()
+        Exit Function
+    End If
+
+    If Left(Trim(json), 1) <> "[" Then
+        Err.Raise 517, "JsonSerializer.DeserializeArray", "JSON string must be a JSON array."
+    End If
+
+    ' Flatten string to remove any line breaks or extra spaces
+    json = FlattenJsonString(json)
+
+    ' Remove the surrounding brackets
+    json = Mid(json, 2, Len(json) - 2)
+
+    'TODO - need to parse the string char by char in case there are commas in quoted strings.
+
+    ReDim items(LBound(items) To UBound(items))
+
+    For i = LBound(items) To UBound(items)
+        items(i) = DeserializeVariant(Trim(items(i)))
+    Next i
+
+    DeserializeArray = items
+End Function
+
+Public Function DeserializeDictionary(json As String) As Scripting.Dictionary
+    Dim dict As Scripting.Dictionary
+    Dim pairs() As String
+    Dim i As Long
+    Dim key As String
+    Dim value As String
+
+    If IsNull(json) Then
+        Set DeserializeDictionary = Nothing
+        Exit Function
+    End If
+
+    If Trim(json) = "" Then
+        Set DeserializeDictionary = New Scripting.Dictionary
+        Exit Function
+    End If
+
+    If Left(Trim(json), 1) <> "{" Then
+        Err.Raise 517, "JsonSerializer.DeserializeDictionary", "JSON string must be a JSON object."
+    End If
+
+    ' Flatten string to remove any line breaks or extra spaces
+    json = FlattenJsonString(json)
+
+    ' Remove the surrounding braces
+    json = Mid(json, 2, Len(json) - 2)
+
+    'TODO - need to parse the string char by char in case there are commas in quoted strings.
+    ' There is no point bulding up a pairs array using : to split because we can't guarentee the 
+    ' key won't have a : in it, so we need to parse char by char and split on the first : that is not in a quoted string.
+    Set dict = New Scripting.Dictionary
+
+    Set DeserializeDictionary = dict
 End Function
 
 '========================================
